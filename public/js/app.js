@@ -182,16 +182,20 @@ function obterCorMunicipio(mun) {
     }
     const chave = normalizarNomeCidade(mun.nome);
     const stats = estatisticasPorCidadeNorm.get(chave);
+    // 1. Município sem contratos publicados no PNCP
     if (!stats || stats.totalProcessos === 0) {
-        return "#e2e8f0"; // Sem contratos no recorte
+        return "#e2e8f0"; // Cinza: Sem Contratos PNCP
     }
-    if (stats.riscoMedioPct >= 58 || stats.totalComRisco >= 12) {
-        return "#f87171"; // Crítico
+    // 2. Se não possui nenhum alerta de anomalia, é rigorosamente REGULAR (Verde)
+    if (stats.totalComRisco === 0) {
+        return "#a7f3d0"; // Verde: Regular (0 Alertas)
     }
-    if (stats.totalComRisco > 0 || stats.riscoMedioPct >= 34) {
-        return "#fcd34d"; // Moderado
+    // 3. Crítico / Alerta Alto: concentração severa de anomalias (>= 10 alertas ou >= 3 com risco médio elevado)
+    if (stats.totalComRisco >= 10 || (stats.totalComRisco >= 3 && stats.riscoMedioPct >= 45)) {
+        return "#f87171"; // Vermelho: Crítico / Alerta Alto
     }
-    return "#a7f3d0"; // Regular
+    // 4. Moderado / Com Alerta: possui processos com anomalia, porém em menor escala
+    return "#fcd34d"; // Amarelo: Moderado / Com Alerta
 }
 function atualizarLegendaMapa() {
     const box = el("legendaMapaBox");
@@ -287,8 +291,12 @@ async function selecionarMunicipioNoMapa(chave, nomeIbge, micro) {
         }
         else {
             selectCidade.value = nomePncp;
+            // Ao focar em um município no mapa, limpa filtros restritivos que poderiam ocultar seus processos
+            el("inputBusca").value = "";
+            el("selectOrgao").value = "TODOS";
+            el("selectCategoria").value = "TODAS";
+            el("selectSituacao").value = "todos";
         }
-        el("selectOrgao").value = "TODOS";
         await carregarOpcoesFiltro(true);
         await buscarProcessos(1, false);
     }
@@ -1692,6 +1700,8 @@ document.addEventListener("DOMContentLoaded", async () => {
     // Filtros Principais e Ordenação
     el("selectCidade").addEventListener("change", async () => {
         el("selectOrgao").value = "TODOS";
+        el("selectCategoria").value = "TODAS";
+        el("inputBusca").value = "";
         await carregarOpcoesFiltro(true);
         await buscarProcessos(1, false);
     });

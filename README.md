@@ -119,3 +119,4 @@ Abra seu navegador em:
 ## 📄 Licença e Uso
 
 Este projeto foi desenvolvido para fins de auditoria pública, controle social e transparência governamental com base nos dados abertos do **Portal Nacional de Contratações Públicas (PNCP)**.
+
