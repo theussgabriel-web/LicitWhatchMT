@@ -1,0 +1,55 @@
+nome_da_coluna;tipo_original;percentual_ausentes;quantidade_unicos;exemplo_valor;funcao_analitica;indicacao
+numero_controle_pncp;object;0.0;3428193;00059311000126-2-000094/2021;Identificador;Manter
+numero_controle_pncp_compra;object;0.0;1205848;00059311000126-1-000046/2021;Identificador;Manter
+numero_controle_pncp_ata;object;91.55;54022;04012548000102-1-000015/2026-000001;Identificador;Avaliar descarte
+ano_contrato;int64;0.0;46;2021;Métrica;Manter
+numero_contrato_empenho;object;0.0;1088175;2021NE000109;Identificador;Manter
+sequencial_contrato;int64;0.0;40034;94;Métrica;Manter
+processo;object;0.0;856490;08750.000408/2021-43;Categoria/Texto;Manter
+tipo_contrato_id;int64;0.0;12;7;Identificador;Manter
+tipo_contrato_nome;object;0.0;12;Empenho;Categoria/Texto;Manter
+categoria_processo_id;int64;0.0;11;8;Identificador;Manter
+categoria_processo_nome;object;0.0;11;Serviços;Categoria/Texto;Manter
+data_assinatura;object;0.0;1865;2021-12-30;Data/Tempo;Manter
+data_vigencia_inicio;object;0.0;2136;2021-12-30;Data/Tempo;Manter
+data_vigencia_fim;object;0.03;5361;2021-12-31;Data/Tempo;Manter
+data_publicacao_pncp;datetime64[us, UTC];0.0;2492040;2022-01-07 09:20:28+00:00;Data/Tempo;Manter
+data_atualizacao;datetime64[us, UTC];0.0;2786154;2022-01-18 17:42:30+00:00;Data/Tempo;Manter
+data_atualizacao_global;datetime64[us, UTC];0.0;2783255;2022-01-18 17:42:30+00:00;Data/Tempo;Manter
+ni_fornecedor;object;0.0;457095;18474854000175;Categoria/Texto;Manter
+tipo_pessoa;object;0.0;3;PJ;Categoria/Texto;Manter
+nome_razao_social_fornecedor;object;0.0;608765;F. DA CRUZ EMBARCACOES;Categoria/Texto;Manter
+codigo_pais_fornecedor;object;61.73;54;BRA;Categoria/Texto;Manter
+ni_fornecedor_subcontratado;object;99.98;455;41610411000186;Categoria/Texto;Avaliar descarte
+nome_fornecedor_subcontratado;object;99.98;459;Z P N PRODUCOES LTDA;Categoria/Texto;Avaliar descarte
+tipo_pessoa_subcontratada;object;99.98;2;PJ;Categoria/Texto;Avaliar descarte
+objeto_contrato;object;0.0;1568862;VALOR QUE EMPENHAMOS, PARA COBRIR DESPESAS COM AQUISIÇÃO DE BARCO SEMI-CHATO FABRICADO COM ALUMÍNIO DE LIGA NAVAL, 6 METROS DE COMPRIMENTO,BOCA MÁXIMA 1,40, BORDA ALTA, CHAPA DE 1,2 MM, CAPACIDADE DE CARGA DE 540 KG OU SUPERIOR, AUTORIZADO PELO COORDENADOR REGIONAL NO OFÍCIO Nº 48/2021/SEGAT - CR-CAC/DIT - CR-CAC/CR-CAC/FUNAI (3745662).;Categoria/Texto;Manter
+informacao_complementar;object;73.73;118842;19400306000232021 - UASG Minuta: 194003;Categoria/Texto;Manter
+valor_inicial;float64;0.0;830158;49960.0;Métrica;Manter
+valor_global;float64;0.0;829111;49960.0;Métrica;Manter
+valor_parcela;float64;0.0;721134;49960.0;Métrica;Manter
+valor_acumulado;float64;39.32;309108;49960.0;Métrica;Manter
+numero_parcelas;int64;0.0;1186;1;Identificador;Manter
+receita;bool;0.0;2;False;Categoria/Texto;Manter
+numero_retificacao;int64;0.0;101;0;Identificador;Manter
+fruto_adesao;object;81.72;2;False;Categoria/Texto;Manter
+tem_remanejamento;object;81.72;2;False;Categoria/Texto;Manter
+orgao_cnpj;object;0.0;14064;00059311000126;Categoria/Texto;Manter
+orgao_razao_social;object;0.0;12402;FUNDACAO NACIONAL DO INDIO;Categoria/Texto;Manter
+orgao_poder_id;object;0.0;4;E;Identificador;Manter
+orgao_esfera_id;object;0.0;5;F;Identificador;Manter
+unidade_uf_sigla;object;0.0;27;RO;Identificador;Manter
+unidade_uf_nome;object;0.0;27;Rondônia;Identificador;Manter
+unidade_codigo;object;0.0;17882;194003;Identificador;Manter
+unidade_nome;object;0.0;28907;COORDENAÇÃO REGIONAL DE CACOAL/RO;Identificador;Manter
+unidade_municipio_nome;object;0.0;4474;Cacoal;Identificador;Manter
+emenda_parlamentar;object;98.8;2;false;Categoria/Texto;Avaliar descarte
+identificador_cipi;object;97.64;102;6045.11-61;Identificador;Avaliar descarte
+url_cipi;object;96.65;109;;Categoria/Texto;Avaliar descarte
+usuario_nome;object;0.0;271;Contratos.gov.br;Categoria/Texto;Manter
+codigo_municipio;int64;0.0;4662;1100049;Métrica;Manter
+nome_municipio;object;0.0;4474;Cacoal;Categoria/Texto;Manter
+sigla_uf;object;0.0;27;RO;Categoria/Texto;Manter
+nome_uf;object;0.0;27;Rondônia;Categoria/Texto;Manter
+nome_regiao;object;0.0;5;Norte;Categoria/Texto;Manter
+codigo_uf;int64;0.0;27;11;Métrica;Manter

@@ -1,0 +1,19 @@
+{
+  "name": "verificador-licitacoes-pncp-mt",
+  "version": "1.0.0",
+  "description": "Sistema de Verificação de Anomalias e Risco em Processos Licitatórios (PNCP-MT) em Node.js e TypeScript",
+  "main": "dist/server.js",
+  "scripts": {
+    "build:server": "tsc -p tsconfig.json",
+    "build:client": "tsc -p tsconfig.client.json",
+    "build": "npm run build:server && npm run build:client",
+    "start": "node dist/server.js",
+    "dev": "npm run build && node dist/server.js"
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "typescript": "^5.7.2"
+  }
+}
+
