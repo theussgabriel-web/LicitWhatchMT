@@ -5,6 +5,13 @@
   --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, monospace;
 }
 
+/* Densidade compacta nativa para Dashboard Executivo em telas desktop (equivalente à proporção ~80%) */
+@media (min-width: 1024px) {
+  :root {
+    font-size: 13.5px;
+  }
+}
+
 body {
   font-family: var(--font-sans);
   background-color: #f1f5f9;
