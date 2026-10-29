@@ -14,6 +14,8 @@ declare const Plotly: {
   ) => void;
 };
 
+declare const html2pdf: any;
+
 type ModoModeloUI = "auditoria" | "preventivo";
 type ModoCorMapaUI = "risco" | "microrregiao";
 
@@ -154,6 +156,7 @@ let paginaAtual = 1;
 let totalPaginasAtual = 1;
 let idProcessoSelecionado: number | null = null;
 let processoDetalheAtual: ProcessoDetalheUI | null = null;
+let historicoFornecedorAtual: HistoricoFornecedorUI | null = null;
 let debounceTimer: number | null = null;
 let toastTimer: number | null = null;
 
@@ -1123,6 +1126,7 @@ function renderizarGaugeVazioPlotly(): void {
 function zerarSelecaoProcesso(): void {
   idProcessoSelecionado = null;
   processoDetalheAtual = null;
+  historicoFornecedorAtual = null;
 
   document
     .querySelectorAll("#tabelaProcessosBody tr.selected-row")
@@ -1546,6 +1550,7 @@ async function carregarDetalhesProcesso(id: number): Promise<void> {
   const proc: ProcessoDetalheUI = dados.processo;
   const hist: HistoricoFornecedorUI = dados.historicoFornecedor;
   processoDetalheAtual = proc;
+  historicoFornecedorAtual = hist;
 
   // Exibir o conteúdo ativo do Dossiê e ocultar o placeholder de estado vazio
   el("dossieVazioPlaceholder").classList.add("hidden");
@@ -1919,65 +1924,342 @@ function exportarTabelaCsv(): void {
   mostrarToast("Exportando planilha CSV dos processos filtrados...");
 }
 
-function baixarFichaTxt(): void {
+async function gerarDossiePdf(): Promise<void> {
   if (!processoDetalheAtual) {
-    mostrarToast("Selecione um processo na tabela antes de baixar o dossiê.");
+    mostrarToast("Selecione um processo na tabela antes de gerar o dossiê em PDF.");
     return;
   }
+
+  if (typeof html2pdf === "undefined") {
+    mostrarToast("Biblioteca de PDF carregando. Tente novamente em instantes...");
+    return;
+  }
+
   const p = processoDetalheAtual;
   const m = p[modoAtual];
+  const hist = historicoFornecedorAtual;
   const pesos = calcularPesosPercentuaisShap(m.shap);
   const traducoes = m.shap.map((s, idx) => traduzirItemShapParaHumano(s, p, pesos[idx]));
 
-  let conteudo = `================================================================================
-LICITWATCH MT — DOSSIÊ DE AUDITORIA DE PROCESSO LICITATÓRIO (PNCP)
-================================================================================
-PARECER          : ${m.isAnomalia ? "COM ALERTA DE RISCO" : "REGULAR (DENTRO DO PADRÃO)"}
-PROBABILIDADE IA : ${m.riscoPercentual.toFixed(1)}% — ${m.faixaPrioridade}
-SCORE ALGORÍTMICO: ${m.scoreAnomalia.toFixed(6)} (Posição #${m.posicaoRanking} de 9.021 em MT)
-MODO DO MODELO   : ${modoAtual === "auditoria" ? "Auditoria Completa (Etapa 10)" : "Alerta na Assinatura (Etapa 24)"}
---------------------------------------------------------------------------------
-IDENTIFICAÇÃO DAS PARTES:
-Órgão Contratante : ${p.orgaoNome} (${p.municipio} - MT)
-CNPJ do Órgão     : ${p.orgaoCnpjFormatado} | Unidade: ${p.unidadeNome}
-Empresa Contratada: ${p.fornecedorNome}
-CNPJ / CPF Forn.  : ${p.fornecedorDocFormatado} (${p.tipoPessoa})
---------------------------------------------------------------------------------
-DADOS FORMAIS E EXECUÇÃO FINANCEIRA:
-Nº do Processo    : ${p.processo}
-ID Controle PNCP  : ${p.idPncp}
-Contrato/Empenho  : ${p.empenho} (${p.tipoContrato}) | Categoria: ${p.categoria}
-Vigência          : ${p.dataVigenciaInicio} a ${p.dataVigenciaFim} (${p.tempoVigenciaDias} dias)
-Valor Inicial     : ${formatarMoeda(p.valorInicial)}
-Valor Global      : ${formatarMoeda(p.valorGlobal)}
-Valor Aditivado   : ${formatarMoeda(p.valorAditivado)}
-Valor da Parcela  : ${formatarMoeda(p.valorParcela)}
-Retificações      : ${p.numeroRetificacoes}
-Objeto            : ${p.objeto}
---------------------------------------------------------------------------------
-EXPLICAÇÃO EM LINGUAGEM SIMPLES (COMPARATIVO COM O PADRÃO DE MATO GROSSO):
-`;
+  mostrarToast("Gerando Dossiê Oficial em PDF de alta resolução...");
 
-  for (const t of traducoes) {
-    const efeitoStr = t.isAumentaRisco
-      ? `[AUMENTA RISCO - Peso: ${t.pesoPercentual}%]`
-      : `[NORMAL / REDUZ RISCO - Peso: ${t.pesoPercentual}%]`;
-    conteudo += `  * ${t.nomeHumano}: ${t.valorProcessoHumano} (Padrão MT: ${t.padraoMt})\n`;
-    conteudo += `    -> ${efeitoStr} ${t.significadoPratico}\n`;
+  const dataEmissao = new Date().toLocaleString("pt-BR", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  });
+
+  const hashIntegridade = Math.abs(
+    Array.from(p.idPncp).reduce((acc, char) => (acc * 31 + char.charCodeAt(0)) | 0, 0)
+  )
+    .toString(16)
+    .toUpperCase()
+    .padStart(8, "0");
+
+  const esferaStr = MAPA_ESFERA[p.esferaId] || p.esferaId || "Estadual";
+  const poderStr = MAPA_PODER[p.poderId] || p.poderId || "Executivo";
+  const pctAditivado =
+    p.valorInicial > 0 ? ((p.valorAditivado / p.valorInicial) * 100).toFixed(1) : "0.0";
+  const pctParcela = (p.proporcaoParcelaGlobal * 100).toFixed(1);
+  const anosVig = (p.tempoVigenciaDias / 365).toFixed(1);
+
+  // Wrapper fora da viewport para renderização DOM limpa pelo html2canvas
+  const wrapper = document.createElement("div");
+  wrapper.style.position = "fixed";
+  wrapper.style.top = "-9999px";
+  wrapper.style.left = "-9999px";
+  wrapper.style.width = "780px";
+  wrapper.style.zIndex = "-1000";
+
+  const root = document.createElement("div");
+  root.style.width = "780px";
+  root.style.padding = "28px 32px";
+  root.style.backgroundColor = "#ffffff";
+  root.style.color = "#0f172a";
+  root.style.fontFamily = "system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif";
+  root.style.fontSize = "11px";
+  root.style.lineHeight = "1.45";
+  root.style.boxSizing = "border-box";
+
+  const corStatus = m.isAnomalia ? "#dc2626" : "#16a34a";
+  const bgStatus = m.isAnomalia ? "#fef2f2" : "#f0fdf4";
+  const bordaStatus = m.isAnomalia ? "#fca5a5" : "#86efac";
+  const tituloVeredito = m.isAnomalia
+    ? "ALERTA DE ANOMALIA DETECTADO — PRIORIDADE DE AUDITORIA"
+    : "CONTRATO REGULAR — SEM INDÍCIO DE ANOMALIA ESTATÍSTICA";
+
+  root.innerHTML = `
+    <!-- CABEÇALHO GOVERNAMENTAL INSTITUCIONAL -->
+    <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 2.5px solid #0f172a; padding-bottom: 14px; margin-bottom: 16px;">
+      <div style="display: flex; align-items: center; gap: 12px;">
+        <div style="width: 44px; height: 44px; border-radius: 10px; background: linear-gradient(135deg, #1e3a8a 0%, #d97706 100%); display: flex; align-items: center; justify-content: center; box-shadow: 0 2px 4px rgba(0,0,0,0.15);">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#ffffff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+            <path d="m9 12 2 2 4-4"/>
+          </svg>
+        </div>
+        <div>
+          <div style="font-size: 18px; font-weight: 900; letter-spacing: -0.5px; color: #0f172a; line-height: 1.1;">
+            LicitWatch <span style="color: #d97706;">MT</span>
+          </div>
+          <div style="font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.8px; color: #475569; margin-top: 2px;">
+            Auditoria e Controle Externo &bull; PNCP Mato Grosso
+          </div>
+        </div>
+      </div>
+      <div style="text-align: right;">
+        <div style="font-size: 11px; font-weight: 800; color: #1e293b; text-transform: uppercase; letter-spacing: 0.5px;">
+          Dossiê Técnico de Fiscalização
+        </div>
+        <div style="font-size: 9.5px; color: #64748b; margin-top: 2px;">
+          Emissão: <strong style="color: #334155;">${dataEmissao}</strong>
+        </div>
+        <div style="font-size: 9.5px; color: #64748b;">
+          Protocolo Digital: <strong style="font-family: monospace; color: #0f172a;">LW-MT-${hashIntegridade}</strong>
+        </div>
+      </div>
+    </div>
+
+    <!-- BANNER DE VEREDITO / SEMÁFORO DE RISCO -->
+    <div style="border: 1.5px solid ${bordaStatus}; border-left: 6px solid ${corStatus}; background-color: ${bgStatus}; border-radius: 8px; padding: 12px 16px; margin-bottom: 16px;">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+        <div style="font-size: 13px; font-weight: 900; color: ${corStatus}; letter-spacing: -0.2px;">
+          ${tituloVeredito}
+        </div>
+        <div style="font-size: 14px; font-weight: 900; color: ${corStatus}; font-family: monospace; background: #ffffff; padding: 3px 10px; border-radius: 6px; border: 1px solid ${bordaStatus};">
+          Risco: ${m.riscoPercentual.toFixed(1)}%
+        </div>
+      </div>
+      <div style="font-size: 10.5px; color: #334155; line-height: 1.45;">
+        <strong>Diagnóstico:</strong> ${escaparHtml(m.recomendacao)}
+      </div>
+      <div style="display: flex; gap: 16px; margin-top: 8px; font-size: 10px; color: #475569; border-top: 1px solid rgba(0,0,0,0.06); padding-top: 6px;">
+        <div>Prioridade: <strong style="color: #0f172a;">${escaparHtml(m.faixaPrioridade)}</strong></div>
+        <div>Ranking Estadual: <strong style="color: #0f172a;">#${m.posicaoRanking.toLocaleString("pt-BR")} de 9.021</strong> contratos</div>
+        <div>Score Algorítmico: <strong style="font-family: monospace; color: #0f172a;">${m.scoreAnomalia.toFixed(6)}</strong></div>
+        <div>Modo: <strong style="color: #0f172a;">${modoAtual === "auditoria" ? "Auditoria Completa (Etapa 10)" : "Alerta na Assinatura (Etapa 24)"}</strong></div>
+      </div>
+    </div>
+
+    <!-- IDENTIFICAÇÃO DAS PARTES (2 COLUNAS) -->
+    <div style="display: flex; gap: 14px; margin-bottom: 16px;">
+      <!-- Órgão -->
+      <div style="flex: 1; border: 1px solid #e2e8f0; border-radius: 8px; background: #f8fafc; padding: 10px 14px;">
+        <div style="font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px; color: #1e3a8a; margin-bottom: 6px; border-bottom: 1px solid #e2e8f0; padding-bottom: 4px;">
+          Órgão Contratante
+        </div>
+        <div style="font-size: 11px; font-weight: 800; color: #0f172a; margin-bottom: 4px;">
+          ${escaparHtml(p.orgaoNome || "Não informado")}
+        </div>
+        <div style="font-size: 10px; color: #475569; line-height: 1.4;">
+          <div><strong>CNPJ:</strong> <span style="font-family: monospace;">${escaparHtml(p.orgaoCnpjFormatado || "Não informado")}</span></div>
+          <div><strong>Unidade:</strong> ${escaparHtml(p.unidadeNome || "Principal")}</div>
+          <div><strong>Município / UF:</strong> ${escaparHtml(p.municipio)} - MT</div>
+          <div><strong>Esfera / Poder:</strong> ${esferaStr} / ${poderStr}</div>
+        </div>
+      </div>
+
+      <!-- Fornecedor -->
+      <div style="flex: 1; border: 1px solid #e2e8f0; border-radius: 8px; background: #f8fafc; padding: 10px 14px;">
+        <div style="font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px; color: #1e3a8a; margin-bottom: 6px; border-bottom: 1px solid #e2e8f0; padding-bottom: 4px;">
+          Empresa Contratada (Fornecedor)
+        </div>
+        <div style="font-size: 11px; font-weight: 800; color: #0f172a; margin-bottom: 4px;">
+          ${escaparHtml(p.fornecedorNome || "Não informado")}
+        </div>
+        <div style="font-size: 10px; color: #475569; line-height: 1.4;">
+          <div><strong>CNPJ / CPF:</strong> <span style="font-family: monospace;">${escaparHtml(p.fornecedorDocFormatado || "Não informado")}</span> (${p.tipoPessoa === "PJ" ? "Pessoa Jurídica" : "Pessoa Física"})</div>
+          <div><strong>Histórico em MT:</strong> ${hist ? `${hist.totalContratosEstado} contrato(s) no PNCP (${formatarMoedaCompacta(hist.valorTotalEstado)})` : "Histórico registrado no PNCP"}</div>
+          <div><strong>Alertas Prévios:</strong> ${hist ? (hist.contratosComRiscoEstado > 0 ? `<strong style="color: #dc2626;">${hist.contratosComRiscoEstado} de ${hist.totalContratosEstado} com alerta</strong>` : `<strong style="color: #16a34a;">0 alertas em ${hist.totalContratosEstado} contrato(s)</strong>`) : "Em análise"}</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- DADOS CONTRATUAIS E EXECUÇÃO FINANCEIRA -->
+    <div style="border: 1px solid #e2e8f0; border-radius: 8px; background: #ffffff; padding: 12px 14px; margin-bottom: 16px;">
+      <div style="font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px; color: #0f172a; margin-bottom: 8px; border-bottom: 1px solid #f1f5f9; padding-bottom: 4px;">
+        Dados da Contratação e Execução Financeira
+      </div>
+      <table style="width: 100%; border-collapse: collapse; font-size: 10px; margin-bottom: 8px;">
+        <tbody>
+          <tr style="border-bottom: 1px solid #f1f5f9;">
+            <td style="padding: 4px 6px; color: #64748b; width: 22%;">Nº Processo Administrativo:</td>
+            <td style="padding: 4px 6px; font-weight: 700; color: #0f172a; width: 28%;">${escaparHtml(p.processo || "Não informado")}</td>
+            <td style="padding: 4px 6px; color: #64748b; width: 22%;">ID Controle PNCP:</td>
+            <td style="padding: 4px 6px; font-weight: 700; font-family: monospace; color: #0f172a; width: 28%;">${escaparHtml(p.idPncp)}</td>
+          </tr>
+          <tr style="border-bottom: 1px solid #f1f5f9;">
+            <td style="padding: 4px 6px; color: #64748b;">Instrumento / Empenho:</td>
+            <td style="padding: 4px 6px; font-weight: 700; color: #0f172a;">${escaparHtml(p.empenho || "S/N")} (${escaparHtml(p.tipoContrato || "Contrato")})</td>
+            <td style="padding: 4px 6px; color: #64748b;">Categoria Econômica:</td>
+            <td style="padding: 4px 6px; font-weight: 700; color: #0f172a;">${escaparHtml(p.categoria || "Geral")}</td>
+          </tr>
+          <tr style="border-bottom: 1px solid #f1f5f9;">
+            <td style="padding: 4px 6px; color: #64748b;">Período de Vigência:</td>
+            <td style="padding: 4px 6px; font-weight: 700; color: #0f172a;">${p.dataVigenciaInicio} a ${p.dataVigenciaFim} (${p.tempoVigenciaDias} dias / ~${anosVig}a)</td>
+            <td style="padding: 4px 6px; color: #64748b;">Retificações / Aditivos:</td>
+            <td style="padding: 4px 6px; font-weight: 700; color: #0f172a;">${p.numeroRetificacoes} alteração(ões)</td>
+          </tr>
+          <tr style="border-bottom: 1px solid #f1f5f9; background: #f8fafc;">
+            <td style="padding: 5px 6px; color: #475569; font-weight: 700;">Valor Inicial Homologado:</td>
+            <td style="padding: 5px 6px; font-weight: 800; font-family: monospace; color: #0f172a;">${formatarMoeda(p.valorInicial)}</td>
+            <td style="padding: 5px 6px; color: #475569; font-weight: 700;">Valor Global Atualizado:</td>
+            <td style="padding: 5px 6px; font-weight: 900; font-family: monospace; color: #0f172a;">${formatarMoeda(p.valorGlobal)}</td>
+          </tr>
+          <tr style="background: #f8fafc;">
+            <td style="padding: 5px 6px; color: #475569; font-weight: 700;">Variação Aditivada:</td>
+            <td style="padding: 5px 6px; font-weight: 800; font-family: monospace; color: ${p.valorAditivado > 0 ? "#dc2626" : "#0f172a"};">
+              ${formatarMoeda(p.valorAditivado)} (${pctAditivado}%)
+            </td>
+            <td style="padding: 5px 6px; color: #475569; font-weight: 700;">Valor Médio da Parcela:</td>
+            <td style="padding: 5px 6px; font-weight: 800; font-family: monospace; color: #0f172a;">
+              ${formatarMoeda(p.valorParcela)} (${pctParcela}% do total)
+            </td>
+          </tr>
+        </tbody>
+      </table>
+      <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 8px 10px;">
+        <div style="font-size: 9.5px; font-weight: 800; text-transform: uppercase; color: #475569; margin-bottom: 2px;">
+          Objeto do Contrato:
+        </div>
+        <div style="font-size: 10px; color: #1e293b; line-height: 1.4;">
+          ${escaparHtml(p.objeto || "Objeto não detalhado no registro do PNCP.")}
+        </div>
+      </div>
+    </div>
+
+    <!-- LAUDO TÉCNICO TREESHAP (EXPLICABILIDADE ALGORÍTMICA) -->
+    <div style="border: 1px solid #e2e8f0; border-radius: 8px; background: #ffffff; padding: 12px 14px; margin-bottom: 16px;">
+      <div style="font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px; color: #0f172a; margin-bottom: 4px;">
+        Laudo Estatístico TreeSHAP &bull; Comparativo com a Amostra de Mato Grosso
+      </div>
+      <div style="font-size: 9.5px; color: #64748b; margin-bottom: 10px;">
+        Decomposição vetorial do peso relativo de cada variável na decisão de anomalia do Isolation Forest:
+      </div>
+      <table style="width: 100%; border-collapse: collapse; font-size: 9.5px;">
+        <thead>
+          <tr style="background: #0f172a; color: #ffffff; text-align: left;">
+            <th style="padding: 6px 8px; border-top-left-radius: 4px;">Indicador Analisado</th>
+            <th style="padding: 6px 8px;">Valor no Processo</th>
+            <th style="padding: 6px 8px;">Padrão Histórico MT</th>
+            <th style="padding: 6px 8px; text-align: center;">Peso na Decisão</th>
+            <th style="padding: 6px 8px; border-top-right-radius: 4px; text-align: center;">Impacto</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${traducoes
+            .map(
+              (t, idx) => `
+            <tr style="border-bottom: 1px solid #f1f5f9; background: ${idx % 2 === 0 ? "#ffffff" : "#f8fafc"};">
+              <td style="padding: 6px 8px; font-weight: 700; color: #1e293b;">
+                ${escaparHtml(t.nomeHumano)}
+                <div style="font-size: 8.5px; font-weight: 400; color: #64748b; margin-top: 2px;">
+                  ${escaparHtml(t.significadoPratico)}
+                </div>
+              </td>
+              <td style="padding: 6px 8px; font-family: monospace; font-weight: 700; color: #0f172a;">
+                ${escaparHtml(t.valorProcessoHumano)}
+              </td>
+              <td style="padding: 6px 8px; color: #475569;">
+                ${escaparHtml(t.padraoMt)}
+              </td>
+              <td style="padding: 6px 8px; text-align: center; font-weight: 800; font-family: monospace; color: ${
+                t.isAumentaRisco ? "#dc2626" : "#475569"
+              };">
+                ${t.pesoPercentual}%
+              </td>
+              <td style="padding: 6px 8px; text-align: center;">
+                <span style="display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 8.5px; font-weight: 800; text-transform: uppercase; ${
+                  t.isAumentaRisco
+                    ? "background: #fee2e2; color: #b91c1c; border: 1px solid #fca5a5;"
+                    : "background: #dcfce7; color: #15803d; border: 1px solid #86efac;"
+                }">
+                  ${t.isAumentaRisco ? "Agrava Risco" : "Dentro do Padrão"}
+                </span>
+              </td>
+            </tr>
+          `
+            )
+            .join("")}
+        </tbody>
+      </table>
+    </div>
+
+    <!-- CHECKLIST DE RECOMENDAÇÕES AO AUDITOR / CONTROLE INTERNO -->
+    <div style="border: 1px solid #cbd5e1; border-radius: 8px; background: #f8fafc; padding: 12px 14px; margin-bottom: 16px;">
+      <div style="font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px; color: #0f172a; margin-bottom: 6px;">
+        Diretrizes e Recomendações de Fiscalização (Controle Interno / TCE-MT)
+      </div>
+      <div style="font-size: 10px; color: #334155; line-height: 1.5;">
+        ${
+          m.isAnomalia
+            ? `
+          <div style="margin-bottom: 4px;">&bull; <strong>1. Análise de Aditamentos:</strong> Confrontar termo aditivo com o limite legal estabelecido pela Lei 14.133/2021 e verificar se as justificativas técnicas atendem ao princípio da economicidade.</div>
+          <div style="margin-bottom: 4px;">&bull; <strong>2. Verificação de Execução Físico-Financeira:</strong> Realizar diligência in loco ou solicitar boletins de medição para certificar que o desembolso das parcelas corresponde ao cronograma executado.</div>
+          <div style="margin-bottom: 4px;">&bull; <strong>3. Regularidade e Capacidade Operacional:</strong> Verificar regularidade fiscal, trabalhista e capacidade técnica instalada da empresa contratada frente ao volume financeiro alocado.</div>
+          <div>&bull; <strong>4. Alinhamento ao Painel de Preços:</strong> Confirmar aderência dos itens faturados aos referenciais médios praticados no PNCP para o estado de Mato Grosso.</div>
+        `
+            : `
+          <div style="margin-bottom: 4px;">&bull; <strong>1. Monitoramento de Rotina:</strong> O processo encontra-se estatisticamente regular perante a base estadual. Manter acompanhamento de rotina das publicações de aditivos.</div>
+          <div>&bull; <strong>2. Acompanhamento Contratual:</strong> Prosseguir com o plano ordinário de auditoria e conformidade formal de liquidação de despesa.</div>
+        `
+        }
+      </div>
+    </div>
+
+    <!-- RODAPÉ INSTITUCIONAL E ASSINATURA DIGITAL -->
+    <div style="border-top: 1.5px solid #cbd5e1; padding-top: 10px; display: flex; justify-content: space-between; align-items: center; font-size: 8.5px; color: #64748b;">
+      <div>
+        <strong>LicitWatch MT</strong> &mdash; Sistema de Detecção de Anomalias em Contratações Públicas.<br/>
+        Documento técnico fundamentado na Lei Federal nº 14.133/2021 e normas de transparência pública.
+      </div>
+      <div style="text-align: right;">
+        Autenticação: <span style="font-family: monospace; font-weight: 700; color: #0f172a;">SHA256-${hashIntegridade}</span><br/>
+        Emissão: ${dataEmissao} | Página 1 de 1
+      </div>
+    </div>
+  `;
+
+  wrapper.appendChild(root);
+  document.body.appendChild(wrapper);
+
+  const opt = {
+    margin: [8, 8, 8, 8],
+    filename: `Dossie_Oficial_LicitWatch_${p.idPncp.replace(/[^a-zA-Z0-9_-]/g, "_")}.pdf`,
+    image: { type: "jpeg", quality: 0.98 },
+    html2canvas: {
+      scale: 2,
+      useCORS: true,
+      logging: false,
+    },
+    jsPDF: {
+      unit: "mm",
+      format: "a4",
+      orientation: "portrait",
+    },
+    pagebreak: {
+      mode: ["avoid-all", "css", "legacy"],
+    },
+  };
+
+  try {
+    await html2pdf().set(opt).from(root).save();
+    mostrarToast("Dossiê oficial em PDF exportado com sucesso!");
+  } catch (erro) {
+    console.error("Erro ao gerar PDF:", erro);
+    mostrarToast("Houve uma falha ao gerar o PDF. Abrindo visualização de impressão...");
+    window.print();
+  } finally {
+    if (document.body.contains(wrapper)) {
+      document.body.removeChild(wrapper);
+    }
   }
-  conteudo += `================================================================================\n`;
-
-  const blob = new Blob([conteudo], { type: "text/plain;charset=utf-8" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = `dossie_licitwatch_${p.idPncp.replace(/[^a-zA-Z0-9_-]/g, "_")}.txt`;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  URL.revokeObjectURL(url);
-  mostrarToast("Dossiê individual (.TXT) exportado com sucesso!");
 }
+
+const baixarFichaTxt = gerarDossiePdf;
 
 async function executarSimulacaoManual(): Promise<void> {
   const btn = el<HTMLButtonElement>("btnExecutarSimulacao");
@@ -2324,10 +2606,10 @@ document.addEventListener("DOMContentLoaded", async () => {
     copiarTextoComToast(el("detIdPncp").textContent || "", "ID PNCP");
   });
 
-  // Exportações (CSV, TXT e Impressão/PDF)
+  // Exportações (CSV e PDF Oficial)
   el("btnExportarCsv").addEventListener("click", exportarTabelaCsv);
-  el("btnBaixarFicha").addEventListener("click", baixarFichaTxt);
-  el("btnExportarRelatorio").addEventListener("click", baixarFichaTxt);
+  el("btnBaixarFicha").addEventListener("click", gerarDossiePdf);
+  el("btnExportarRelatorio").addEventListener("click", gerarDossiePdf);
   el("btnImprimirDossie").addEventListener("click", () => {
     window.print();
   });
