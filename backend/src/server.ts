@@ -21,14 +21,33 @@ const ML_DIR = path.join(ROOT_DIR, "ml");
 const PYTHON_EXE = process.env.PYTHON_EXE || (process.platform === "win32" ? "python" : "python3");
 const CLI_SCRIPT = path.join(ML_DIR, "avaliar_cli.py");
 
-console.log("Carregando base de licitações PNCP-MT em memória...");
-const rawJson = fs.readFileSync(DATA_FILE, "utf-8");
-const baseDados: BaseCompletaPayload = JSON.parse(rawJson);
-const processos: ProcessoLicitatorio[] = baseDados.processos;
-const estatisticasMt: EstatisticasMt = baseDados.estatisticasMt;
+const HOST = "0.0.0.0";
 
+if (!fs.existsSync(DATA_FILE)) {
+  console.error(`[ERRO CRÍTICO] Arquivo de dados não encontrado: ${DATA_FILE}`);
+  console.error("Certifique-se de que o arquivo 'data/pncp_mt_completo.json' está presente no contêiner ou no diretório de trabalho.");
+  process.exit(1);
+}
+
+if (!fs.existsSync(PUBLIC_DIR)) {
+  console.warn(`[AVISO] Diretório estático frontend não encontrado: ${PUBLIC_DIR}`);
+}
+
+console.log("Carregando base de licitações PNCP-MT em memória...");
+let processos: ProcessoLicitatorio[] = [];
+let estatisticasMt: EstatisticasMt;
 const mapaPorId = new Map<number, ProcessoLicitatorio>();
 const mapaPorFornecedor = new Map<string, ProcessoLicitatorio[]>();
+
+try {
+  const rawJson = fs.readFileSync(DATA_FILE, "utf-8");
+  const baseDados: BaseCompletaPayload = JSON.parse(rawJson);
+  processos = baseDados.processos;
+  estatisticasMt = baseDados.estatisticasMt;
+} catch (err) {
+  console.error(`[ERRO CRÍTICO] Falha ao processar o arquivo de dados ${DATA_FILE}:`, err);
+  process.exit(1);
+}
 
 for (const p of processos) {
   mapaPorId.set(p.id, p);
@@ -479,8 +498,24 @@ function obterDetalhesProcesso(id: number, modo: ModoModelo) {
   };
 }
 
+let simulacaoEmExecucao = false;
+
 function executarSimulacaoPython(corpoJson: string): Promise<unknown> {
   return new Promise((resolve, reject) => {
+    if (!fs.existsSync(CLI_SCRIPT)) {
+      return reject(new Error(`Script de inferência Python não encontrado em: ${CLI_SCRIPT}`));
+    }
+
+    if (simulacaoEmExecucao) {
+      return reject(
+        new Error(
+          "O simulador está processando outra análise no momento. Para proteger a memória do servidor, aguarde alguns instantes e tente novamente."
+        )
+      );
+    }
+
+    simulacaoEmExecucao = true;
+
     const child = spawn(PYTHON_EXE, [CLI_SCRIPT], {
       cwd: ML_DIR,
       stdio: ["pipe", "pipe", "pipe"],
@@ -488,6 +523,19 @@ function executarSimulacaoPython(corpoJson: string): Promise<unknown> {
 
     let stdoutData = "";
     let stderrData = "";
+    let finalizado = false;
+
+    // Timeout de 45 segundos para liberar recursos caso a inferência exceda o tempo esperado
+    const timeoutHandle = setTimeout(() => {
+      if (!finalizado) {
+        finalizado = true;
+        simulacaoEmExecucao = false;
+        try {
+          child.kill("SIGKILL");
+        } catch (_) {}
+        reject(new Error("A simulação excedeu o tempo limite de execução (45s)."));
+      }
+    }, 45000);
 
     child.stdout.on("data", (chunk) => {
       stdoutData += chunk.toString("utf-8");
@@ -497,6 +545,11 @@ function executarSimulacaoPython(corpoJson: string): Promise<unknown> {
     });
 
     child.on("close", (code) => {
+      if (finalizado) return;
+      finalizado = true;
+      clearTimeout(timeoutHandle);
+      simulacaoEmExecucao = false;
+
       if (code === 0 && stdoutData.trim()) {
         try {
           resolve(JSON.parse(stdoutData.trim()));
@@ -504,16 +557,29 @@ function executarSimulacaoPython(corpoJson: string): Promise<unknown> {
           reject(new Error(`Falha ao interpretar retorno JSON do Python: ${err}`));
         }
       } else {
-        reject(new Error(stderrData || `Processo Python finalizou com código ${code}`));
+        const msg = stderrData.trim() || `Processo Python finalizou com código ${code}`;
+        reject(new Error(msg));
       }
     });
 
     child.on("error", (err) => {
-      reject(err);
+      if (finalizado) return;
+      finalizado = true;
+      clearTimeout(timeoutHandle);
+      simulacaoEmExecucao = false;
+      reject(new Error(`Falha ao iniciar o interpretador Python (${PYTHON_EXE}): ${err.message}`));
     });
 
-    child.stdin.write(corpoJson);
-    child.stdin.end();
+    try {
+      child.stdin.write(corpoJson);
+      child.stdin.end();
+    } catch (err) {
+      if (finalizado) return;
+      finalizado = true;
+      clearTimeout(timeoutHandle);
+      simulacaoEmExecucao = false;
+      reject(err);
+    }
   });
 }
 
@@ -531,6 +597,19 @@ const server = http.createServer(async (req, res) => {
   try {
     const reqUrl = new URL(req.url || "/", `http://${req.headers.host || "localhost"}`);
     const pathname = reqUrl.pathname;
+
+    if (req.method === "GET" && (pathname === "/health" || pathname === "/api/health")) {
+      enviarJson(res, 200, {
+        status: "ok",
+        servico: "LicitWatch MT",
+        uptimeSegundos: Math.round(process.uptime()),
+        timestamp: new Date().toISOString(),
+        processosCarregados: processos.length,
+        fornecedoresCarregados: mapaPorFornecedor.size,
+        memoriaHeapMb: Math.round(process.memoryUsage().heapUsed / 1024 / 1024),
+      });
+      return;
+    }
 
     if (req.method === "GET" && pathname === "/api/opcoes") {
       const modo: ModoModelo = reqUrl.searchParams.get("modo") === "preventivo" ? "preventivo" : "auditoria";
@@ -668,9 +747,11 @@ const server = http.createServer(async (req, res) => {
   }
 });
 
-server.listen(PORT, () => {
+server.listen(PORT, HOST, () => {
   console.log("============================================================================");
   console.log(`🚀 Servidor LicitWatch MT (Node.js + TypeScript) iniciado com sucesso!`);
-  console.log(`🌐 Acesse no navegador: http://localhost:${PORT}`);
+  console.log(`🌐 Ouvindo em: http://${HOST}:${PORT}`);
+  console.log(`📡 Health Check: http://${HOST}:${PORT}/health`);
+  console.log(`💻 Local: http://localhost:${PORT}`);
   console.log("============================================================================");
 });

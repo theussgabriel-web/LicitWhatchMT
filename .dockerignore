@@ -1,0 +1,52 @@
+# ==============================================================================
+# .dockerignore: LicitWatch MT
+# Exclusões seguras para manter o contexto Docker enxuto e seguro
+# ==============================================================================
+
+# Dependências e caches locais
+node_modules
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Controle de versão e automações
+.git
+.github
+.agents
+
+# Python: caches e ambientes virtuais locais
+__pycache__
+*.py[cod]
+*$py.class
+*.so
+.venv
+venv
+ENV
+env
+
+# Saídas de compilação locais (geradas durante o build da imagem)
+backend/dist
+*.tsbuildinfo
+
+# Documentação, design e notebooks de exploração não necessários em runtime
+docs
+ml/notebooks
+ml/app.py
+ml/exportar_dados_node.py
+ml/resultados/graficos
+ml/resultados/tabelas
+scripts
+
+# Arquivos de IDE e SO
+.vscode
+.idea
+.DS_Store
+Thumbs.db
+*.sublime-project
+*.sublime-workspace
+
+# Logs e arquivos temporários
+*.log
+.env*
+.system_generated
+scratch

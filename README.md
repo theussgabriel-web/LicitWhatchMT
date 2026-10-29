@@ -127,6 +127,117 @@ Abra seu navegador em:
 
 ---
 
+## 🐳 Implantação e Deploy com Docker (Render)
+
+### 1. Visão Geral da Arquitetura de Produção
+
+A aplicação é executada em contêiner Docker unificado baseado em Debian (`node:20-bookworm-slim`), contendo:
+- **Backend Node.js 20**: Servidor HTTP nativo em TypeScript compilado, responsável pela API REST e pela entrega dos assets estáticos do frontend.
+- **Frontend SPA**: HTML5, CSS3 e TypeScript compilado em `/frontend/public`, servido diretamente na raiz (`/`).
+- **Runtime Python 3.11**: Ambiente virtual isolado em `/opt/venv` com bibliotecas científicas (`scikit-learn`, `shap`, `joblib`, `numpy`, `pandas`, `pyarrow`).
+- **Inferência sob demanda**: O endpoint `/api/simular` aciona o script `ml/avaliar_cli.py` via `child_process.spawn`, carregando o modelo `artefatos_modelos_pncp_mt.joblib` e retornando métricas de anomalia e valores SHAP em JSON.
+
+### 2. Pré-requisitos Locais
+- **Node.js** (v18 ou superior) e **npm**
+- **Docker** (para build e execução em contêiner local)
+- **Python 3.10+** com pip (caso queira executar fora do Docker)
+
+### 3. Como Executar Sem Docker
+```bash
+# 1. Instalar dependências Node e Python
+npm install
+pip install -r requirements.txt
+
+# 2. Compilar e iniciar
+npm run build
+npm start
+```
+Acesse: `http://localhost:3000`
+
+### 4. Como Construir a Imagem Docker
+Na raiz do repositório:
+```bash
+docker build -t licitwatch-mt .
+```
+
+### 5. Como Iniciar o Contêiner Localmente
+```bash
+docker run -d --name licitwatch -p 3000:3000 -e PORT=3000 licitwatch-mt
+```
+Para acompanhar os logs de inicialização:
+```bash
+docker logs -f licitwatch
+```
+
+### 6. Porta e Variável `PORT`
+O servidor detecta automaticamente a porta fornecida pela variável de ambiente `PORT` (fornecida dinamicamente pelo Render).
+- **Fallback local:** `3000`
+- **Host de escuta:** `0.0.0.0` (garante acessibilidade externa dentro do contêiner)
+
+### 7. Rota de Health Check
+- **Endpoint:** `GET /health` (também disponível em `GET /api/health`)
+- **Comportamento:** Resposta rápida (< 5 ms) em código HTTP `200`, indicando que a base de 9.021 contratos está carregada e o servidor está pronto para tráfego. Não dispara o interpretador Python.
+
+### 8. Variáveis de Ambiente
+| Variável | Padrão no Contêiner | Descrição |
+|---|---|---|
+| `PORT` | `3000` | Porta HTTP do servidor (injetada automaticamente pelo Render). |
+| `NODE_ENV` | `production` | Modo de execução do Node.js. |
+| `PYTHON_EXE` | `/opt/venv/bin/python3` | Caminho do interpretador Python para simulação. |
+
+### 9. Arquivos Obrigatórios em Runtime
+Os seguintes arquivos devem estar presentes no contêiner:
+- `data/pncp_mt_completo.json` (base estruturada com ~33,6 MB)
+- `ml/modelos_salvos/artefatos_modelos_pncp_mt.joblib` (modelo serializado com ~9,6 MB)
+- `ml/resultados/modelos/contratos_mt_12m_scored.parquet` (dados de referência com ~2,2 MB)
+- `ml/avaliar_cli.py` e `ml/ml_engine.py` (scripts de inferência)
+- `frontend/public/` (arquivos estáticos, incluindo `mt_mapa_real.json` e `js/app.js`)
+
+### 10. Como Configurar o Serviço no Render
+No painel do [Render Dashboard](https://dashboard.render.com):
+1. Clique em **New +** e selecione **Web Service**.
+2. Conecte o repositório `theussgabriel-web/LicitWhatchMT`.
+3. Preencha as configurações:
+   - **Name:** `licitwatch-mt`
+   - **Language:** `Docker`
+   - **Branch:** `main`
+   - **Root Directory:** *(deixar em branco / raiz)*
+   - **Dockerfile Path:** `./Dockerfile`
+   - **Instance Type / Plan:** `Free` (0.1 CPU, 512 MB RAM) para validação inicial.
+   - **Health Check Path:** `/health`
+4. Clique em **Create Web Service**.
+
+### 11. Limitações do Plano Gratuito (Render Free)
+- **CPU Compartilhada:** 0.1 CPU pode fazer a inicialização inicial levar entre 15 e 30 segundos.
+- **Suspensão por Inatividade:** Após 15 minutos sem requisições, a instância é suspensa. A primeira requisição subsequente terá um *cold start* de cerca de 30 a 50 segundos.
+- **Teto de RAM (512 MB):** O Node.js consome cerca de 110 MB após carregar a base. O simulador Python consome cerca de 150 a 180 MB durante a inferência SHAP.
+
+### 12. Riscos de Memória e Mitigações Adotadas
+- O Node.js foi configurado com a flag `--max-old-space-size=256`, forçando coleta agressiva de lixo da V8.
+- O servidor possui controle de concorrência no endpoint `/api/simular`, impedindo que dois processos Python rodem simultaneamente no mesmo contêiner de 512 MB.
+- As dependências Python foram reduzidas exclusivamente ao runtime de inferência (`numpy`, `pandas`, `scikit-learn`, `shap`, `joblib`, `pyarrow`), excluindo ferramentas de dashboard como `streamlit` e `matplotlib`.
+- Se o simulador for utilizado intensivamente com múltiplas requisições simultâneas, recomenda-se o plano **Starter (1 GB RAM, $7/mês)** para evitar o encerramento do contêiner com código `137` (Out of Memory Killer).
+
+### 13. Funcionamento do Processo Python
+O backend Node.js não mantém o Python rodando continuamente na memória para poupar RAM. O Python é invocado via `child_process.spawn` estritamente quando o usuário clica em "Avaliar Novo Contrato" no simulador. Os dados trafegam via `stdin`/`stdout` em formato JSON e o processo é finalizado ao término da predição. Há um timeout de segurança de 45 segundos para matar processos que excedam o tempo esperado.
+
+### 14. Compatibilidade das Versões de Machine Learning
+Para evitar erros de desserialização do `artefatos_modelos_pncp_mt.joblib`:
+- `numpy`: restrito à faixa `1.24.0` a `<2.0.0` (evita quebra de compatibilidade binária da ABI C do NumPy 2.x).
+- `scikit-learn`: mantido na faixa `1.3.0` a `<1.6.0`.
+- `shap`: faixa `0.44.0` a `<0.47.0`.
+
+### 15. Processo Manual de Validação Pós-Deploy
+Após a publicação do serviço no Render:
+1. Verifique nos logs do Render a mensagem: `Base LicitWatch MT carregada: 9.021 processos`.
+2. Acesse a URL fornecida pelo Render no navegador (`https://licitwatch-mt.onrender.com`).
+3. Confirme que o mapa dos 141 municípios e a tabela de licitações carregam normalmente.
+4. Acesse a rota `https://seu-dominio.onrender.com/health` e confirme o retorno `{"status":"ok", ...}`.
+5. Acesse a aba **Simulador de Contratos**, preencha os campos de teste e clique em **Executar Análise de Risco**.
+6. Confirme que o gauge de risco, a faixa de prioridade e os fatores SHAP são calculados com sucesso.
+
+---
+
 ## 📄 Licença e Uso
 
 Este projeto foi desenvolvido para fins de auditoria pública, controle social e transparência governamental com base nos dados abertos do **Portal Nacional de Contratações Públicas (PNCP)**.
