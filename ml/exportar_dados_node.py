@@ -25,7 +25,7 @@ from ml_engine import (
     treinar_ou_carregar_artefatos,
 )
 
-PASTA_DATA = DIRETORIO_BASE / "data"
+PASTA_DATA = DIRETORIO_BASE.parent / "data"
 PASTA_DATA.mkdir(parents=True, exist_ok=True)
 ARQUIVO_SAIDA = PASTA_DATA / "pncp_mt_completo.json"
 

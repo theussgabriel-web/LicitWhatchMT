@@ -14,11 +14,12 @@ import {
 } from "./types";
 
 const PORT = Number(process.env.PORT || 3000);
-const ROOT_DIR = path.resolve(__dirname, "..");
+const ROOT_DIR = path.resolve(__dirname, "..", "..");
 const DATA_FILE = path.join(ROOT_DIR, "data", "pncp_mt_completo.json");
-const PUBLIC_DIR = path.join(ROOT_DIR, "public");
-const PYTHON_EXE = "C:\\Users\\matheus.gabriel\\AppData\\Local\\Python\\pythoncore-3.14-64\\python.exe";
-const CLI_SCRIPT = path.join(ROOT_DIR, "avaliar_cli.py");
+const PUBLIC_DIR = path.join(ROOT_DIR, "frontend", "public");
+const ML_DIR = path.join(ROOT_DIR, "ml");
+const PYTHON_EXE = process.env.PYTHON_EXE || (process.platform === "win32" ? "python" : "python3");
+const CLI_SCRIPT = path.join(ML_DIR, "avaliar_cli.py");
 
 console.log("Carregando base de licitações PNCP-MT em memória...");
 const rawJson = fs.readFileSync(DATA_FILE, "utf-8");
@@ -481,7 +482,7 @@ function obterDetalhesProcesso(id: number, modo: ModoModelo) {
 function executarSimulacaoPython(corpoJson: string): Promise<unknown> {
   return new Promise((resolve, reject) => {
     const child = spawn(PYTHON_EXE, [CLI_SCRIPT], {
-      cwd: ROOT_DIR,
+      cwd: ML_DIR,
       stdio: ["pipe", "pipe", "pipe"],
     });
 

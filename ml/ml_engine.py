@@ -23,7 +23,7 @@ warnings.filterwarnings("ignore")
 # Caminhos padrão do projeto
 DIRETORIO_BASE = Path(__file__).resolve().parent
 CAMINHO_PARQUET_PADRAO = (
-    DIRETORIO_BASE / "resultados_pncp_mt (1)" / "modelos" / "contratos_mt_12m_scored.parquet"
+    DIRETORIO_BASE / "resultados" / "modelos" / "contratos_mt_12m_scored.parquet"
 )
 PASTA_MODELOS_SALVOS = DIRETORIO_BASE / "modelos_salvos"
 

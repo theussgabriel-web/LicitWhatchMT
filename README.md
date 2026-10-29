@@ -69,7 +69,7 @@ cd LicitWhatchMT
 ### 2. Instalar Dependências
 ```bash
 npm install
-pip install -r requirements.txt
+pip install -r ml/requirements.txt
 ```
 
 ### 3. Iniciar o Sistema (Modo de Desenvolvimento)
@@ -92,27 +92,38 @@ Abra seu navegador em:
 ## 📂 Estrutura de Diretórios
 
 ```
+├── backend/                         # API REST (Node.js + TypeScript)
+│   ├── src/
+│   │   ├── server.ts                # Servidor HTTP e rotas da API
+│   │   └── types.ts                 # Tipos TypeScript compartilhados
+│   └── tsconfig.json
+├── frontend/                        # Interface web
+│   ├── src/
+│   │   └── app.ts                   # Lógica da interface, mapas, filtros e gráficos
+│   ├── public/                      # Arquivos estáticos servidos pelo backend
+│   │   ├── index.html
+│   │   ├── styles.css
+│   │   ├── mt_mapa_real.json        # Malha cartográfica dos 141 municípios de MT
+│   │   └── js/app.js                # JavaScript compilado do frontend
+│   └── tsconfig.json
+├── ml/                              # Motor de Machine Learning (Python)
+│   ├── ml_engine.py                 # Treinamento e predição IsolationForest + SHAP
+│   ├── avaliar_cli.py               # Inferência chamada pelo backend (simulador)
+│   ├── exportar_dados_node.py       # Gera data/pncp_mt_completo.json
+│   ├── app.py                       # Dashboard Streamlit (legado)
+│   ├── requirements.txt
+│   ├── modelos_salvos/              # Modelos pré-treinados (.joblib)
+│   ├── resultados/                  # Gráficos, tabelas e base parquet
+│   └── notebooks/                   # Notebook e script original do projeto
 ├── data/
 │   └── pncp_mt_completo.json        # Base tratada de 9.021 contratos e metadados
-├── modelos_salvos/
-│   └── artefatos_modelos_pncp_mt.joblib # Modelos pré-treinados IsolationForest + SHAP
-├── public/
-│   ├── index.html                   # Interface completa institucional
-│   ├── styles.css                   # Customizações de estilo e regras de impressão
-│   ├── mt_mapa_real.json            # Malha cartográfica oficial dos 141 municípios de MT
-│   └── js/
-│       └── app.js                   # JavaScript compilado do frontend
-├── src/
-│   ├── server.ts                    # Servidor HTTP Node.js + TypeScript (API REST)
-│   ├── types.ts                     # Definições de tipos TypeScript compartilhados
-│   └── client/
-│       └── app.ts                   # Lógica da interface, mapas, filtros e gráficos
-├── ml_engine.py                     # Pipeline de treinamento e predição IsolationForest + SHAP
-├── avaliar_cli.py                   # Script de inferência e integração Python-Node
-├── tsconfig.json                    # Configuração TypeScript do Servidor
-├── tsconfig.client.json             # Configuração TypeScript do Cliente
-└── package.json                     # Scripts e dependências do projeto
+├── docs/                            # Relatório técnico e protótipos de design
+├── scripts/
+│   └── iniciar_sistema.bat          # Atalho para compilar e iniciar no Windows
+└── package.json                     # Scripts de build/execução
 ```
+
+> O simulador usa o Python do `PATH`. Para usar outro executável, defina a variável de ambiente `PYTHON_EXE`.
 
 ---
 

@@ -8,6 +8,5 @@
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true
   },
-  "include": ["src/client/app.ts"]
+  "include": ["src/app.ts"]
 }
-
