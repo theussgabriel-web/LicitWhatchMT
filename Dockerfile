@@ -28,8 +28,7 @@ ENV PATH="$VIRTUAL_ENV/bin:$PATH"
 # 3. Definir diretório de trabalho da aplicação
 WORKDIR /app
 
-# 4. Variáveis de ambiente de produção
-ENV NODE_ENV=production
+# 4. Variáveis de ambiente de build
 ENV PORT=3000
 ENV PYTHON_EXE=/opt/venv/bin/python3
 
@@ -37,8 +36,8 @@ ENV PYTHON_EXE=/opt/venv/bin/python3
 COPY package*.json ./
 COPY requirements.txt ./
 
-# 6. Instalar dependências Node.js (incluindo TypeScript para o build)
-RUN npm ci
+# 6. Instalar dependências Node.js (garantindo ferramentas de compilação TypeScript)
+RUN npm ci --include=dev
 
 # 7. Instalar dependências Python de inferência de Machine Learning no virtualenv
 RUN pip install --no-cache-dir -r requirements.txt
@@ -48,6 +47,10 @@ COPY . .
 
 # 9. Compilar TypeScript (backend e frontend)
 RUN npm run build
+
+# 10. Limpar dependências de desenvolvimento e definir modo de produção
+RUN npm prune --production
+ENV NODE_ENV=production
 
 # 10. Ajustar permissões para o usuário não-root 'node' (segurança)
 RUN chown -R node:node /app /opt/venv

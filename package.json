@@ -10,7 +10,10 @@
     "start": "node backend/dist/server.js",
     "dev": "npm run build && node backend/dist/server.js"
   },
-  "dependencies": {},
+  "dependencies": {
+    "@types/node": "^22.10.0",
+    "typescript": "^5.7.2"
+  },
   "devDependencies": {
     "@types/node": "^22.10.0",
     "typescript": "^5.7.2"
